@@ -1,3 +1,4 @@
+
 import java.awt.*;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
@@ -114,10 +115,10 @@ public abstract class BaseDashboard extends JFrame {
     }
 
     static String firstName(String full) {
-        return full.trim().split("\\s+")[0];
+        return full == null ? "" : full.trim();
     }
 
-    // ================================================================ ICONS
+// ================================================================ ICONS
     /**
      * Draws a simple 20x20 line icon at (x, y).
      */
@@ -554,6 +555,7 @@ public abstract class BaseDashboard extends JFrame {
         h.setBorder(new EmptyBorder(24, 32, 6, 32));
         h.add(pageBanner, BorderLayout.CENTER);
         return h;
+
     }
 
     // ================================================================ BANNER
@@ -631,7 +633,7 @@ public abstract class BaseDashboard extends JFrame {
         }
     }
 
-    // ================================================================ LAYOUT HELPERS
+// ================================================================ LAYOUT HELPERS
     static JLabel lbl(String text, int style, int size, Color color) {
         JLabel l = new JLabel(text);
         l.setFont(font(style, size));
@@ -678,6 +680,7 @@ public abstract class BaseDashboard extends JFrame {
             p.add(item);
         }
         return p;
+
     }
 
     /**
@@ -789,6 +792,7 @@ public abstract class BaseDashboard extends JFrame {
         scroll.getViewport().setBackground(BG);
         scroll.getVerticalScrollBar().setUnitIncrement(18);
         return scroll;
+
     }
 
     static class ScrollPage extends JPanel implements Scrollable {
@@ -814,7 +818,7 @@ public abstract class BaseDashboard extends JFrame {
         }
     }
 
-    // ================================================================ COMPONENTS
+// ================================================================ COMPONENTS
     /**
      * Rounded panel. With shadow on, a faint shadow shows under the bottom edge
      * (3 px are reserved for it).
@@ -931,6 +935,7 @@ public abstract class BaseDashboard extends JFrame {
         c.add(head, BorderLayout.NORTH);
         c.add(body, BorderLayout.CENTER);
         return c;
+
     }
 
     static class Dot extends JComponent {
@@ -1068,6 +1073,7 @@ public abstract class BaseDashboard extends JFrame {
                 c = MUTED;
         }
         return new Pill(s, c);
+
     }
 
     static class Avatar extends JComponent {
@@ -1183,6 +1189,7 @@ public abstract class BaseDashboard extends JFrame {
 
     static JButton dangerButton(String t) {
         return new RoundButton(t, tint(RED, 0.14f), shade(RED, 0.25f), null, 10, 22, 13);
+
     }
 
     /**
@@ -1465,6 +1472,7 @@ public abstract class BaseDashboard extends JFrame {
             });
         }
         return p;
+
     }
 
     static class StatCard extends RoundedPanel {
@@ -1496,7 +1504,7 @@ public abstract class BaseDashboard extends JFrame {
         }
     }
 
-    // ---- table with colored status badges ----
+// ---- table with colored status badges ----
     static JComponent table(String[] cols, Object[][] rows, int statusCol, int... widths) {
         DefaultTableModel model = new DefaultTableModel(rows, cols) {
             @Override
@@ -1574,6 +1582,7 @@ public abstract class BaseDashboard extends JFrame {
         wrap.add(h, BorderLayout.NORTH);
         wrap.add(t, BorderLayout.CENTER);
         return wrap;
+
     }
 
     /**
@@ -1604,7 +1613,7 @@ public abstract class BaseDashboard extends JFrame {
         }
     }
 
-    // ---- row with avatar, name, subtitle and something on the right ----
+// ---- row with avatar, name, subtitle and something on the right ----
     static JComponent personRow(String name, String sub, JComponent right) {
         return personRow(name, sub, right, null);
     }
@@ -1776,6 +1785,7 @@ public abstract class BaseDashboard extends JFrame {
         pc.setBorder(new EmptyBorder(16, 24, 10, 24));
         pc.add(steps, BorderLayout.CENTER);
         return pc;
+
     }
 
     // ---- vertical bar chart ----
@@ -1826,7 +1836,7 @@ public abstract class BaseDashboard extends JFrame {
         }
     }
 
-    // ---- horizontal bars (ranking) ----
+// ---- horizontal bars (ranking) ----
     static class HBars extends JComponent {
 
         private final String[] labels;
@@ -1870,7 +1880,7 @@ public abstract class BaseDashboard extends JFrame {
         }
     }
 
-    // ---- a note box (info / warning) ----
+// ---- a note box (info / warning) ----
     static JComponent notice(Color c, String title, String text) {
         RoundedPanel p = new RoundedPanel(10, tint(c, 0.12f), tint(c, 0.4f));
         p.setLayout(new BorderLayout(14, 0));
@@ -1942,6 +1952,7 @@ public abstract class BaseDashboard extends JFrame {
         } catch (IllegalArgumentException | IllegalStateException | SecurityException ex) {
             JOptionPane.showMessageDialog(parent, ex.getMessage(), "Action not allowed", JOptionPane.WARNING_MESSAGE);
             return false;
+
         }
     }
 
@@ -2033,6 +2044,7 @@ public abstract class BaseDashboard extends JFrame {
             }
         });
         return tableComponent;
+
     }
 
     /**
@@ -2157,6 +2169,7 @@ public abstract class BaseDashboard extends JFrame {
      */
     static JComponent searchField(String hint, Consumer<String> onChange) {
         return new SearchBox(hint, onChange);
+
     }
 
     static class SearchBox extends JPanel {
@@ -2301,6 +2314,7 @@ public abstract class BaseDashboard extends JFrame {
             box.add(lbl(facts[i][1], Font.PLAIN, 13, INK), c);
         }
         return box;
+
     }
 
     /**
@@ -2656,12 +2670,16 @@ public abstract class BaseDashboard extends JFrame {
         });
     }
 
-    /** Contact number: digits only. */
+    /**
+     * Contact number: digits only.
+     */
     static boolean isDigit(int cp) {
         return cp >= '0' && cp <= '9';
     }
 
-    /** Home address: letters, numbers, spaces, commas, periods and hyphens. */
+    /**
+     * Home address: letters, numbers, spaces, commas, periods and hyphens.
+     */
     static boolean isAddressChar(int cp) {
         return Character.isLetterOrDigit(cp) || cp == ' ' || cp == ',' || cp == '.' || cp == '-';
     }
