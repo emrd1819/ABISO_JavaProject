@@ -855,6 +855,8 @@ public class ResidentDashboard extends BaseDashboard {
         pPurok = inputField();
         pContact = inputField();
         pAddress = inputArea(3);
+        restrictInput(pContact, BaseDashboard::isDigit, 11);
+        restrictInput(pAddress, BaseDashboard::isAddressChar, 200);
 
         JButton discard = secondaryButton("Discard changes");
         JButton save = primaryButton("Save changes");
@@ -991,10 +993,13 @@ public class ResidentDashboard extends BaseDashboard {
 
         String validPurok = need(purok, "purok");
         String validContact = need(contact, "contact number");
-        if (!validContact.matches("[0-9+()\\-\\s]{7,20}")) {
-            throw new IllegalArgumentException("Please enter a valid contact number.");
+        if (!isValidContactNumber(validContact)) {
+            throw new IllegalArgumentException(CONTACT_RULE);
         }
-        String validAddress = need(address, "home address");
+        String validAddress = need(address, "home address").replaceAll("\\s+", " ");
+        if (!isValidAddress(validAddress)) {
+            throw new IllegalArgumentException(ADDRESS_RULE);
+        }
 
         String sql = "UPDATE users SET purok = ?, contact_number = ?, address = ? "
                 + "WHERE user_id = ? AND role = 'RESIDENT'";

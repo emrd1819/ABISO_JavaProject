@@ -645,6 +645,7 @@ public class StaffDashboard extends BaseDashboard {
     private JComponent profile() {
         profileHeaderView = dyn(this::profileHeader);
         sContact = inputField();
+        restrictInput(sContact, BaseDashboard::isDigit, 11);
 
         JButton discard = secondaryButton("Discard changes");
         JButton save = primaryButton("Save changes");
@@ -763,8 +764,8 @@ public class StaffDashboard extends BaseDashboard {
         }
 
         String validContact = contact == null ? "" : contact.trim();
-        if (!validContact.isEmpty() && !validContact.matches("[0-9+()\\-\\s]{7,20}")) {
-            throw new IllegalArgumentException("Please enter a valid contact number.");
+        if (!validContact.isEmpty() && !isValidContactNumber(validContact)) {
+            throw new IllegalArgumentException(CONTACT_RULE);
         }
 
         String sql = "UPDATE users SET contact_number = ? "

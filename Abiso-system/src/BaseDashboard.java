@@ -2610,6 +2610,73 @@ public abstract class BaseDashboard extends JFrame {
         return p;
     }
 
+    // ================================================================ INPUT RULES
+    /**
+     * Stops unwanted characters as the person types or pastes, and caps the
+     * length. Line breaks and tabs become spaces.
+     */
+    static void restrictInput(javax.swing.text.JTextComponent field,
+            java.util.function.IntPredicate allowed, int maxLength) {
+
+        ((javax.swing.text.AbstractDocument) field.getDocument()).setDocumentFilter(
+                new javax.swing.text.DocumentFilter() {
+
+            private String clean(String text, int currentLength, int replacedLength) {
+                StringBuilder out = new StringBuilder();
+                if (text == null) {
+                    return "";
+                }
+                String flat = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ');
+                int room = maxLength - (currentLength - replacedLength);
+                for (int i = 0; i < flat.length() && out.length() < room;) {
+                    int cp = flat.codePointAt(i);
+                    if (allowed.test(cp)) {
+                        out.appendCodePoint(cp);
+                    }
+                    i += Character.charCount(cp);
+                }
+                return out.toString();
+            }
+
+            @Override
+            public void insertString(FilterBypass fb, int offset, String text,
+                    javax.swing.text.AttributeSet attr) throws javax.swing.text.BadLocationException {
+                String c = clean(text, fb.getDocument().getLength(), 0);
+                if (!c.isEmpty()) {
+                    super.insertString(fb, offset, c, attr);
+                }
+            }
+
+            @Override
+            public void replace(FilterBypass fb, int offset, int length, String text,
+                    javax.swing.text.AttributeSet attrs) throws javax.swing.text.BadLocationException {
+                super.replace(fb, offset, length,
+                        clean(text, fb.getDocument().getLength(), length), attrs);
+            }
+        });
+    }
+
+    /** Contact number: digits only. */
+    static boolean isDigit(int cp) {
+        return cp >= '0' && cp <= '9';
+    }
+
+    /** Home address: letters, numbers, spaces, commas, periods and hyphens. */
+    static boolean isAddressChar(int cp) {
+        return Character.isLetterOrDigit(cp) || cp == ' ' || cp == ',' || cp == '.' || cp == '-';
+    }
+
+    static boolean isValidContactNumber(String s) {
+        return s != null && s.matches("[0-9]{11}");
+    }
+
+    static boolean isValidAddress(String s) {
+        return s != null && s.matches("[\\p{L}0-9 .,\\-]+");
+    }
+
+    static final String CONTACT_RULE = "Contact number must be exactly 11 digits (numbers only), for example 09171234567.";
+    static final String ADDRESS_RULE = "Home address may only contain letters, numbers, spaces, commas, periods and hyphens.";
+
     // ================================================================ SHARED DATA MODELS AND CONSTANTS
     static final String[] STATUSES = {"Submitted", "Viewed", "In progress", "Resolved", "Declined"};
     static final String[] CATEGORIES = {"Sanitation", "Roads & Lights", "Noise", "Peace & Order", "Others"};
