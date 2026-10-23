@@ -1756,9 +1756,9 @@ public abstract class BaseDashboard extends JFrame {
      */
     static int stepOf(String status) {
         switch (status) {
-            case "Waiting":
+            case "Submitted":
                 return 0;
-            case "Reviewing":
+            case "Viewed":
                 return 1;
             case "In progress":
                 return 2;
@@ -2611,7 +2611,7 @@ public abstract class BaseDashboard extends JFrame {
     }
 
     // ================================================================ SHARED DATA MODELS AND CONSTANTS
-    static final String[] STATUSES = {"Waiting", "Reviewing", "In progress", "Resolved", "Declined"};
+    static final String[] STATUSES = {"Submitted", "Viewed", "In progress", "Resolved", "Declined"};
     static final String[] CATEGORIES = {"Sanitation", "Roads & Lights", "Noise", "Peace & Order", "Others"};
     static final String[] TAGS = {"Event", "Health", "Notice", "Reminder"};
 
@@ -2678,10 +2678,10 @@ public abstract class BaseDashboard extends JFrame {
 
         /**
          * A resident may edit or delete a report ONLY while it is still
-         * Waiting.
+         * Submitted.
          */
         boolean canResidentEdit() {
-            return "Waiting".equals(status);
+            return "Submitted".equals(status);
         }
     }
 
@@ -2743,13 +2743,13 @@ public abstract class BaseDashboard extends JFrame {
         List<Report> reports = new ArrayList<>();
 
         String sql
-                = "SELECT r.id, r.resident_id, u.full_name, "
+                = "SELECT r.report_id, r.resident_id, "
+                + Db.fullName("u") + " AS full_name, "
                 + "r.subject, r.category, r.location, r.details, "
                 + "r.status, r.filed_on, r.updated_on, r.closed_on "
                 + "FROM reports r "
-                + "JOIN residents res ON r.resident_id = res.user_id "
-                + "JOIN users u ON res.user_id = u.id "
-                + "ORDER BY r.filed_on DESC, r.id DESC";
+                + "JOIN users u ON r.resident_id = u.user_id "
+                + "ORDER BY r.filed_on DESC, r.report_id DESC";
 
         try (java.sql.Connection conn = Db.get();
                 java.sql.PreparedStatement stmt
@@ -2761,7 +2761,7 @@ public abstract class BaseDashboard extends JFrame {
                 java.sql.Date updated = rs.getDate("updated_on");
 
                 Report report = new Report(
-                        rs.getInt("id"),
+                        rs.getInt("report_id"),
                         rs.getInt("resident_id"),
                         rs.getString("full_name"),
                         rs.getString("subject"),
@@ -2793,11 +2793,11 @@ public abstract class BaseDashboard extends JFrame {
     static void loadReportNotes(Report report) {
 
         String sql
-                = "SELECT n.created_on, u.full_name, n.note "
+                = "SELECT n.created_on, " + Db.fullName("u") + " AS full_name, n.note "
                 + "FROM report_notes n "
-                + "JOIN users u ON n.staff_id = u.id "
+                + "JOIN users u ON n.staff_id = u.user_id "
                 + "WHERE n.report_id = ? "
-                + "ORDER BY n.created_on ASC, n.id ASC";
+                + "ORDER BY n.created_on ASC, n.note_id ASC";
 
         try (java.sql.Connection conn = Db.get();
                 java.sql.PreparedStatement stmt
@@ -2851,28 +2851,20 @@ public abstract class BaseDashboard extends JFrame {
 
         List<Announcement> announcements = new ArrayList<>();
 
-        String sql = "SELECT a.id, a.tag, a.title, a.summary, "
-                + "a.full_text, a.pinned, a.posted_at, "
-                + "u.full_name, s.position "
+        String sql = "SELECT a.announcement_id, a.tag, a.title, a.summary, "
+                + "a.full_text, a.schedule, a.venue, a.pinned, a.posted_at, "
+                + Db.fullName("u") + " AS full_name "
                 + "FROM announcements a "
-                + "JOIN users u ON a.staff_id = u.id "
-                + "LEFT JOIN staff s ON a.staff_id = s.user_id "
-                + "ORDER BY a.pinned DESC, a.posted_at DESC, a.id DESC";
-
-        String factSql = "SELECT label, value "
-                + "FROM announcement_facts "
-                + "WHERE announcement_id = ? "
-                + "ORDER BY sort_order ASC, id ASC";
+                + "JOIN users u ON a.staff_id = u.user_id "
+                + "ORDER BY a.pinned DESC, a.posted_at DESC, a.announcement_id DESC";
 
         try (java.sql.Connection conn = Db.get();
                 java.sql.PreparedStatement stmt = conn.prepareStatement(sql);
-                java.sql.ResultSet rs = stmt.executeQuery();
-                java.sql.PreparedStatement factStmt
-                = conn.prepareStatement(factSql)) {
+                java.sql.ResultSet rs = stmt.executeQuery()) {
 
             while (rs.next()) {
 
-                Announcement a = new Announcement(rs.getInt("id"));
+                Announcement a = new Announcement(rs.getInt("announcement_id"));
 
                 a.tag = rs.getString("tag");
                 a.title = rs.getString("title");
@@ -2884,27 +2876,19 @@ public abstract class BaseDashboard extends JFrame {
                 a.postedAt = posted.toLocalDateTime();
 
                 a.staffName = rs.getString("full_name");
-                a.staffRole = rs.getString("position");
+                a.staffRole = "Barangay Staff";
 
-                if (a.staffRole == null) {
-                    a.staffRole = "Barangay Staff";
-                }
-
-                factStmt.setInt(1, a.id);
-
+                // "When" and "Where" are stored as the schedule and venue
+                // columns; the screens still show them as detail rows.
                 List<String[]> facts = new ArrayList<>();
-
-                try (java.sql.ResultSet factRs
-                        = factStmt.executeQuery()) {
-
-                    while (factRs.next()) {
-                        facts.add(new String[]{
-                            factRs.getString("label"),
-                            factRs.getString("value")
-                        });
-                    }
+                String schedule = rs.getString("schedule");
+                String venue = rs.getString("venue");
+                if (schedule != null && !schedule.trim().isEmpty()) {
+                    facts.add(new String[]{"When", schedule});
                 }
-
+                if (venue != null && !venue.trim().isEmpty()) {
+                    facts.add(new String[]{"Where", venue});
+                }
                 a.facts = facts.toArray(new String[0][]);
 
                 announcements.add(a);

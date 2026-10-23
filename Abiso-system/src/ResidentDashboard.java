@@ -1,4 +1,3 @@
-
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -54,7 +53,7 @@ public class ResidentDashboard extends BaseDashboard {
             return status;
         }
 
-        String sql = "SELECT status FROM residents "
+        String sql = "SELECT account_status FROM users "
                 + "WHERE user_id = ?";
 
         try (java.sql.Connection conn = Db.get();
@@ -65,7 +64,7 @@ public class ResidentDashboard extends BaseDashboard {
 
             try (java.sql.ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
-                    return rs.getString("status");
+                    return rs.getString("account_status");
                 }
             }
 
@@ -478,7 +477,7 @@ public class ResidentDashboard extends BaseDashboard {
     }
 
     /**
-     * The newest report that is still open (Waiting, Reviewing or In progress).
+     * The newest report that is still open (Submitted, Viewed or In progress).
      */
     private Report latestActive() {
         for (Report r : mine()) {
@@ -769,7 +768,7 @@ public class ResidentDashboard extends BaseDashboard {
 
     /**
      * All the information about one report, with Edit / Delete (only while it
-     * is Waiting).
+     * is Submitted).
      */
     private JComponent detailView(JDialog d, Report r) {
         List<JComponent> blocks = new ArrayList<>(reportBlocks(r, false));
@@ -815,7 +814,7 @@ public class ResidentDashboard extends BaseDashboard {
 
     /**
      * Edit form for a pending report. The data layer re-checks that the report
-     * is still Waiting.
+     * is still Submitted.
      */
     private JComponent editView(JDialog d, Report r) {
         JComboBox<String> category = comboOf(CATEGORIES);
@@ -967,7 +966,7 @@ public class ResidentDashboard extends BaseDashboard {
      * the field blank.
      */
     private String loadResidentColumn(String column) {
-        String sql = "SELECT " + column + " FROM residents WHERE user_id = ?";
+        String sql = "SELECT " + column + " FROM users WHERE user_id = ?";
         try (java.sql.Connection conn = Db.get();
                 java.sql.PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, userId);
@@ -997,8 +996,8 @@ public class ResidentDashboard extends BaseDashboard {
         }
         String validAddress = need(address, "home address");
 
-        String sql = "UPDATE residents SET purok = ?, contact_number = ?, address = ? "
-                + "WHERE user_id = ?";
+        String sql = "UPDATE users SET purok = ?, contact_number = ?, address = ? "
+                + "WHERE user_id = ? AND role = 'RESIDENT'";
 
         try (java.sql.Connection conn = Db.get();
                 java.sql.PreparedStatement stmt
@@ -1022,7 +1021,7 @@ public class ResidentDashboard extends BaseDashboard {
     private List<Report> mine() {
         List<Report> out = new ArrayList<>();
         for (Report r : reports) {
-            if (r.resident.equals(userName)) {
+            if (r.residentId == userId) {
                 out.add(r);
             }
         }
@@ -1079,7 +1078,7 @@ public class ResidentDashboard extends BaseDashboard {
             stmt.setString(3, category);
             stmt.setString(4, validLocation);
             stmt.setString(5, validDetails);
-            stmt.setString(6, "Waiting");
+            stmt.setString(6, "Submitted");
             stmt.setDate(7, java.sql.Date.valueOf(today));
             stmt.setDate(8, java.sql.Date.valueOf(today));
 
@@ -1110,8 +1109,8 @@ public class ResidentDashboard extends BaseDashboard {
         String sql = "UPDATE reports SET "
                 + "subject = ?, category = ?, location = ?, "
                 + "details = ?, updated_on = CURDATE() "
-                + "WHERE id = ? AND resident_id = ? "
-                + "AND status = 'Waiting'";
+                + "WHERE report_id = ? AND resident_id = ? "
+                + "AND status = 'Submitted'";
 
         try (java.sql.Connection conn = Db.get();
                 java.sql.PreparedStatement stmt
@@ -1150,8 +1149,8 @@ public class ResidentDashboard extends BaseDashboard {
         }
 
         String sql = "DELETE FROM reports "
-                + "WHERE id = ? AND resident_id = ? "
-                + "AND status = 'Waiting'";
+                + "WHERE report_id = ? AND resident_id = ? "
+                + "AND status = 'Submitted'";
 
         try (java.sql.Connection conn = Db.get();
                 java.sql.PreparedStatement stmt

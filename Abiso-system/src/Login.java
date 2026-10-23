@@ -87,12 +87,16 @@ public class Login extends JFrame {
                 && !email.substring(0, email.indexOf('@')).contains("..");
     }
 
+    // Letters (including accents and Ñ), spaces, periods, hyphens, apostrophes.
+    private static boolean isValidName(String name) {
+        return name != null && name.matches("\\p{L}[\\p{L} .'\\-]{0,98}");
+    }
+
     private static Account find(String email) {
-        String sql = "SELECT u.id, u.full_name, u.email, "
-                + "u.password_hash, u.role, "
-                + "r.status, r.purok "
+        String sql = "SELECT u.user_id, " + Db.fullName("u") + " AS full_name, "
+                + "u.email, u.password_hash, u.role, "
+                + "u.account_status, u.purok "
                 + "FROM users u "
-                + "LEFT JOIN residents r ON u.id = r.user_id "
                 + "WHERE u.email = ?";
 
         try (Connection conn = Db.get();
@@ -103,18 +107,19 @@ public class Login extends JFrame {
             try (ResultSet rs = stmt.executeQuery()) {
                 if (rs.next()) {
                     return new Account(
-                            rs.getInt("id"),
+                            rs.getInt("user_id"),
                             rs.getString("full_name"),
                             rs.getString("email"),
                             rs.getString("password_hash"),
                             rs.getString("role"),
-                            rs.getString("status"),
+                            rs.getString("account_status"),
                             rs.getString("purok")
                     );
                 }
             }
 
         } catch (SQLException e) {
+            System.err.println("Database error while looking up the account: " + e.getMessage());
             throw new IllegalStateException("Unable to connect to the system. Please check your connection and try again.", e);
         }
 
@@ -129,7 +134,7 @@ public class Login extends JFrame {
     private Message loginError;
     private JButton signInButton;
 
-    private HintField regName, regEmail, regPurok;
+    private HintField regLast, regFirst, regMiddle, regEmail, regPurok;
     private PasswordBox regPass, regConfirm;
     private StrengthMeter meter;
     private Message regError;
@@ -452,7 +457,7 @@ public class Login extends JFrame {
         tabs.select(1);
         swap(registerView);
         setDefault(registerButton);
-        regName.requestFocusInWindow();
+        regLast.requestFocusInWindow();
     }
 
     // ================================================================ SIGN IN VIEW
@@ -542,7 +547,9 @@ public class Login extends JFrame {
 
     // ================================================================ SIGN UP VIEW
     private void buildRegister() {
-        regName = textField("e.g. Juan Dela Cruz");
+        regLast = textField("e.g. Dela Cruz");
+        regFirst = textField("e.g. Juan");
+        regMiddle = textField("Optional");
         regEmail = textField("you@example.com");
         regPurok = textField("e.g. Purok 4");
         regPass = new PasswordBox("Password", false);
@@ -578,11 +585,17 @@ public class Login extends JFrame {
         passRow.add(BaseDashboard.labeled("Password", regPass));
         passRow.add(BaseDashboard.labeled("Confirm password", regConfirm));
 
+        JPanel nameRow = new JPanel(new GridLayout(1, 2, 12, 0));
+        nameRow.setOpaque(false);
+        nameRow.add(BaseDashboard.labeled("Last name", new FieldShell(-1, regLast, null)));
+        nameRow.add(BaseDashboard.labeled("First name", new FieldShell(-1, regFirst, null)));
+
         registerView = column(14,
                 column(4, BaseDashboard.heading("Create your account", 28, INK),
                         BaseDashboard.wrap("For residents of the barangay. After signing in, finish setting up your profile so staff can verify your residency.",
                                 340, 13, MUTED)),
-                BaseDashboard.labeled("Full name", new FieldShell(USER, regName, null)),
+                nameRow,
+                BaseDashboard.labeled("Middle name (optional)", new FieldShell(USER, regMiddle, null)),
                 BaseDashboard.labeled("Email", new FieldShell(MAIL, regEmail, null)),
                 BaseDashboard.labeled("Purok / address", new FieldShell(PIN, regPurok, null)),
                 column(8, passRow, meter),
@@ -594,14 +607,21 @@ public class Login extends JFrame {
      * Checks the sign-up form and creates a pending resident account.
      */
     void register() {
-        String name = regName.getText().trim();
+        String last = regLast.getText().trim().replaceAll("\\s+", " ");
+        String first = regFirst.getText().trim().replaceAll("\\s+", " ");
+        String middle = regMiddle.getText().trim().replaceAll("\\s+", " ");
         String email = regEmail.getText().trim().toLowerCase();
         String purok = regPurok.getText().trim();
         String p1 = new String(regPass.field.getPassword());
         String p2 = new String(regConfirm.field.getPassword());
 
-        if (name.isEmpty() || email.isEmpty() || purok.isEmpty() || p1.isEmpty()) {
-            regError.show("Please fill in all the fields.");
+        if (last.isEmpty() || first.isEmpty() || email.isEmpty() || purok.isEmpty() || p1.isEmpty()) {
+            regError.show("Please fill in all the fields. Only the middle name is optional.");
+            return;
+        }
+        if (!isValidName(last) || !isValidName(first)
+                || (!middle.isEmpty() && !isValidName(middle))) {
+            regError.show("Names may only contain letters, spaces, periods, hyphens and apostrophes.");
             return;
         }
         if (!isValidGmail(email)) {
@@ -629,48 +649,24 @@ public class Login extends JFrame {
         String passwordHash = BCrypt.hashpw(p1, BCrypt.gensalt(12));
 
         String sql = "INSERT INTO users "
-                + "(full_name, email, password_hash, role) "
-                + "VALUES (?, ?, ?, 'RESIDENT')";
+                + "(last_name, first_name, middle_name, email, password_hash, "
+                + "role, purok, account_status) "
+                + "VALUES (?, ?, ?, ?, ?, 'RESIDENT', ?, 'PENDING')";
 
-        String residentSql = "INSERT INTO residents "
-                + "(user_id, status, purok, registered_on) "
-                + "VALUES (?, 'PENDING', ?, CURDATE())";
+        try (Connection conn = Db.get();
+                PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-        try (Connection conn = Db.get()) {
-            conn.setAutoCommit(false);
+            stmt.setString(1, last);
+            stmt.setString(2, first);
+            stmt.setString(3, middle.isEmpty() ? null : middle);
+            stmt.setString(4, email);
+            stmt.setString(5, passwordHash);
+            stmt.setString(6, purok);
+            stmt.executeUpdate();
 
-            try {
-                int userId;
-
-                try (PreparedStatement stmt = conn.prepareStatement(
-                        sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
-
-                    stmt.setString(1, name);
-                    stmt.setString(2, email);
-                    stmt.setString(3, passwordHash);
-                    stmt.executeUpdate();
-
-                    try (ResultSet keys = stmt.getGeneratedKeys()) {
-                        if (!keys.next()) {
-                            throw new SQLException("Could not retrieve new user ID.");
-                        }
-                        userId = keys.getInt(1);
-                    }
-                }
-
-                try (PreparedStatement stmt = conn.prepareStatement(residentSql)) {
-                    stmt.setInt(1, userId);
-                    stmt.setString(2, purok);
-                    stmt.executeUpdate();
-                }
-
-                conn.commit();
-
-            } catch (SQLException e) {
-                conn.rollback();
-                throw e;
-            }
-
+        } catch (java.sql.SQLIntegrityConstraintViolationException e) {
+            regError.show("That email is already registered.");
+            return;
         } catch (SQLException e) {
             regError.show("Registration failed. Please try again.");
             System.err.println("Registration error: " + e.getMessage());
@@ -681,7 +677,9 @@ public class Login extends JFrame {
                 "Your account has been created.\nSign in and finish setting up your profile\n(contact number and address).\n"
                 + "Barangay staff can verify your residency once that is done.",
                 "Account created", JOptionPane.INFORMATION_MESSAGE);
-        regName.setText("");
+        regLast.setText("");
+        regFirst.setText("");
+        regMiddle.setText("");
         regPurok.setText("");
         regEmail.setText("");
         regPass.field.setText("");

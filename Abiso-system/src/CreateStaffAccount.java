@@ -1,97 +1,91 @@
-
 import java.io.Console;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Scanner;
 import org.mindrot.jbcrypt.BCrypt;
 
+/**
+ * One-time utility that creates a staff account in the users table.
+ *
+ * Run it from a terminal so the password is hidden. If it is run from an IDE
+ * (no terminal), it still works, but the password is visible while typing.
+ */
 public class CreateStaffAccount {
+
+    private static String ask(Console console, Scanner in, String prompt, String fallback) {
+        String answer = console != null ? console.readLine("%s", prompt) : readLine(in, prompt);
+        answer = answer == null ? "" : answer.trim();
+        return answer.isEmpty() ? fallback : answer;
+    }
+
+    private static String readLine(Scanner in, String prompt) {
+        System.out.print(prompt);
+        return in.hasNextLine() ? in.nextLine() : "";
+    }
 
     public static void main(String[] args) {
 
         Console console = System.console();
+        Scanner in = null;
 
         if (console == null) {
-            System.err.println(
-                    "Run this utility from a terminal so the password is hidden."
-            );
-            return;
+            System.err.println("No hidden-input terminal found (for example, running from an IDE).");
+            System.err.println("The password will be VISIBLE while you type it.");
+            in = new Scanner(System.in);
         }
 
-        char[] password = console.readPassword(
-                "Enter a new staff password: "
-        );
+        String firstName = ask(console, in, "First name [ABISO]: ", "ABISO");
+        String lastName = ask(console, in, "Last name [Staff]: ", "Staff");
+        String email = ask(console, in, "Email [staff@abiso.local]: ", "staff@abiso.local").toLowerCase();
 
-        if (password == null || password.length < 8) {
+        String password;
+        if (console != null) {
+            char[] chars = console.readPassword("Enter a new staff password: ");
+            password = chars == null ? "" : new String(chars);
+            if (chars != null) {
+                java.util.Arrays.fill(chars, '\0');
+            }
+        } else {
+            password = readLine(in, "Enter a new staff password: ");
+        }
+
+        if (password.length() < 8) {
             System.out.println("Password must be at least 8 characters.");
             return;
         }
 
-        String passwordHash = BCrypt.hashpw(
-                new String(password),
-                BCrypt.gensalt(12)
-        );
-
-        java.util.Arrays.fill(password, '\0');
+        String passwordHash = BCrypt.hashpw(password, BCrypt.gensalt(12));
 
         String sql = "INSERT INTO users "
-                + "(full_name, email, password_hash, role) "
-                + "VALUES (?, ?, ?, 'STAFF')";
+                + "(last_name, first_name, email, password_hash, role, "
+                + "account_status, verified_on) "
+                + "VALUES (?, ?, ?, ?, 'STAFF', 'VERIFIED', CURDATE())";
 
-        String staffSql = "INSERT INTO staff "
-                + "(user_id, position, active) "
-                + "VALUES (?, ?, 1)";
+        try (Connection conn = Db.get();
+                PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-        try (Connection conn = Db.get()) {
+            stmt.setString(1, lastName);
+            stmt.setString(2, firstName);
+            stmt.setString(3, email);
+            stmt.setString(4, passwordHash);
+            stmt.executeUpdate();
 
-            conn.setAutoCommit(false);
-
-            try {
-                int userId;
-
-                try (PreparedStatement stmt
-                        = conn.prepareStatement(
-                                sql,
-                                java.sql.Statement.RETURN_GENERATED_KEYS
-                        )) {
-
-                            stmt.setString(1, "ABISO Staff");
-                            stmt.setString(2, "staff@abiso.local");
-                            stmt.setString(3, passwordHash);
-                            stmt.executeUpdate();
-
-                            try (ResultSet keys = stmt.getGeneratedKeys()) {
-                                if (!keys.next()) {
-                                    throw new SQLException("No user ID returned.");
-                                }
-                                userId = keys.getInt(1);
-                            }
-                        }
-
-                        try (PreparedStatement stmt
-                                = conn.prepareStatement(staffSql)) {
-
-                            stmt.setInt(1, userId);
-                            stmt.setString(2, "Barangay Secretary");
-                            stmt.executeUpdate();
-                        }
-
-                        conn.commit();
-
-                        System.out.println(
-                                "Staff account created successfully!"
-                        );
-
-            } catch (SQLException e) {
-                conn.rollback();
-                throw e;
+            try (PreparedStatement q = conn.prepareStatement(
+                    "SELECT user_code FROM users WHERE email = ?")) {
+                q.setString(1, email);
+                try (ResultSet rs = q.executeQuery()) {
+                    String code = rs.next() ? rs.getString(1) : "(none)";
+                    System.out.println("Staff account created successfully! ID: " + code
+                            + "  Email: " + email);
+                }
             }
 
+        } catch (java.sql.SQLIntegrityConstraintViolationException e) {
+            System.err.println("That email is already registered.");
         } catch (SQLException e) {
-            System.err.println(
-                    "Staff creation failed: " + e.getMessage()
-            );
+            System.err.println("Staff creation failed: " + e.getMessage());
         }
     }
 }

@@ -15,10 +15,9 @@ import org.mindrot.jbcrypt.BCrypt;
 public class StaffDashboard extends BaseDashboard {
 
     /**
-     * Position shown on announcements this staff member posts until the real
-     * position is loaded from the database (My Profile).
+     * Label shown for staff on their profile and on announcements they post.
      */
-    private static final String STAFF_ROLE = "Barangay Secretary";
+    private static final String STAFF_ROLE = "Barangay Staff";
     private final int staffId;
 
     private final List<Report> reports = loadReports();
@@ -41,10 +40,10 @@ public class StaffDashboard extends BaseDashboard {
 
     // ---- UI-only state ----
     private String currentPage = "Overview";
-    private String staffPosition = STAFF_ROLE;            // shown on the profile and on new posts
+    private final String staffPosition = STAFF_ROLE;      // shown on the profile and on new posts
     private Dyn profileHeaderView;
     private Dyn announcementFeedView;
-    private JTextField sPosition, sContact;               // My Profile form fields
+    private JTextField sContact;                          // My Profile form field
     private boolean profileLoaded = false;
 
     private Dyn dyn(Supplier<JComponent> source) {
@@ -207,7 +206,7 @@ public class StaffDashboard extends BaseDashboard {
 
                         Report newReport = null;
                         for (Report r : reports) {
-                            if (!oldReportIds.contains(r.id) && "Waiting".equals(r.status)
+                            if (!oldReportIds.contains(r.id) && "Submitted".equals(r.status)
                                     && (newReport == null || r.id > newReport.id)) {
                                 newReport = r;
                             }
@@ -251,7 +250,7 @@ public class StaffDashboard extends BaseDashboard {
     private void updateBadges() {
         int waiting = 0, pending = 0;
         for (Report r : reports) {
-            if ("Waiting".equals(r.status)) {
+            if ("Submitted".equals(r.status)) {
                 waiting++;
             }
         }
@@ -431,7 +430,7 @@ public class StaffDashboard extends BaseDashboard {
                     reportQuery = q;
                     list.refresh();
                 });
-        String[][] filters = {{"All", null}, {"Waiting", "Waiting"}, {"Reviewing", "Reviewing"},
+        String[][] filters = {{"All", null}, {"Submitted", "Submitted"}, {"Viewed", "Viewed"},
         {"In progress", "In progress"}, {"Resolved", "Resolved"}, {"Declined", "Declined"}};
         JPanel chips = chipRow(filters, status -> {
             reportFilter = status;
@@ -645,7 +644,6 @@ public class StaffDashboard extends BaseDashboard {
     // ------------------------------------------------------------ MY PROFILE
     private JComponent profile() {
         profileHeaderView = dyn(this::profileHeader);
-        sPosition = inputField();
         sContact = inputField();
 
         JButton discard = secondaryButton("Discard changes");
@@ -655,7 +653,7 @@ public class StaffDashboard extends BaseDashboard {
             loadProfileOnce();
         });
         save.addActionListener(e -> {
-            boolean ok = attempt(this, () -> saveProfile(sPosition.getText(), sContact.getText()));
+            boolean ok = attempt(this, () -> saveProfile(sContact.getText()));
             if (ok) {
                 profileHeaderView.refresh();
                 toast("Profile updated", "Your details were saved.", GREEN, "check");
@@ -663,7 +661,6 @@ public class StaffDashboard extends BaseDashboard {
         });
 
         JComponent form = column(14,
-                labeled("Position", sPosition),
                 labeled("Contact number", sContact),
                 buttons(discard, save));
 
@@ -721,7 +718,6 @@ public class StaffDashboard extends BaseDashboard {
             @Override
             protected String[] doInBackground() {
                 return new String[]{
-                    loadStaffColumn("position"),
                     loadStaffColumn("contact_number")};
             }
 
@@ -729,12 +725,7 @@ public class StaffDashboard extends BaseDashboard {
             protected void done() {
                 try {
                     String[] v = get();
-                    sPosition.setText(v[0]);
-                    sContact.setText(v[1]);
-                    if (!v[0].isEmpty()) {
-                        staffPosition = v[0];
-                        profileHeaderView.refresh();
-                    }
+                    sContact.setText(v[0]);
                 } catch (Exception ex) {
                     System.err.println("Profile load failed: " + ex.getMessage());
                 }
@@ -748,7 +739,7 @@ public class StaffDashboard extends BaseDashboard {
      * the field blank.
      */
     private String loadStaffColumn(String column) {
-        String sql = "SELECT " + column + " FROM staff WHERE user_id = ?";
+        String sql = "SELECT " + column + " FROM users WHERE user_id = ?";
         try (Connection conn = Db.get();
                 PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, staffId);
@@ -764,28 +755,26 @@ public class StaffDashboard extends BaseDashboard {
         return "";
     }
 
-    private void saveProfile(String position, String contact) {
+    private void saveProfile(String contact) {
 
         if (staffId <= 0) {
             throw new IllegalStateException(
                     "Please log in with a valid staff account.");
         }
 
-        String validPosition = need(position, "position");
         String validContact = contact == null ? "" : contact.trim();
         if (!validContact.isEmpty() && !validContact.matches("[0-9+()\\-\\s]{7,20}")) {
             throw new IllegalArgumentException("Please enter a valid contact number.");
         }
 
-        String sql = "UPDATE staff SET position = ?, contact_number = ? "
-                + "WHERE user_id = ?";
+        String sql = "UPDATE users SET contact_number = ? "
+                + "WHERE user_id = ? AND role = 'STAFF'";
 
         try (Connection conn = Db.get();
                 PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-            stmt.setString(1, validPosition);
-            stmt.setString(2, validContact);
-            stmt.setInt(3, staffId);
+            stmt.setString(1, validContact.isEmpty() ? null : validContact);
+            stmt.setInt(2, staffId);
 
             stmt.executeUpdate();
 
@@ -793,8 +782,6 @@ public class StaffDashboard extends BaseDashboard {
             throw new IllegalStateException(
                     "Failed to update profile: " + e.getMessage(), e);
         }
-
-        staffPosition = validPosition;
     }
 
     // ------------------------------------------------------------ RESIDENT INFORMATION
@@ -925,7 +912,7 @@ public class StaffDashboard extends BaseDashboard {
      * column names (never user input). A missing column just gives "".
      */
     private String loadResidentColumn(int userId, String column) {
-        String sql = "SELECT " + column + " FROM residents WHERE user_id = ?";
+        String sql = "SELECT " + column + " FROM users WHERE user_id = ?";
         try (Connection conn = Db.get();
                 PreparedStatement stmt = conn.prepareStatement(sql)) {
             stmt.setInt(1, userId);
@@ -947,8 +934,9 @@ public class StaffDashboard extends BaseDashboard {
      * Returns null when the columns cannot be read, so nobody gets blocked.
      */
     private java.util.Set<Integer> loadCompleteIds() {
-        String sql = "SELECT user_id FROM residents "
-                + "WHERE contact_number IS NOT NULL AND contact_number <> '' "
+        String sql = "SELECT user_id FROM users "
+                + "WHERE role = 'RESIDENT' "
+                + "AND contact_number IS NOT NULL AND contact_number <> '' "
                 + "AND address IS NOT NULL AND address <> ''";
         try (Connection conn = Db.get();
                 PreparedStatement stmt = conn.prepareStatement(sql);
@@ -986,9 +974,9 @@ public class StaffDashboard extends BaseDashboard {
      * Declined -> pending again, so staff can approve after checking an ID.
      */
     private void reconsiderResident(Resident res) {
-        String sql = "UPDATE residents "
-                + "SET status = 'PENDING', decided_on = NULL "
-                + "WHERE user_id = ? AND status = 'REJECTED'";
+        String sql = "UPDATE users "
+                + "SET account_status = 'PENDING', verified_by = NULL, verified_on = NULL "
+                + "WHERE user_id = ? AND role = 'RESIDENT' AND account_status = 'REJECTED'";
 
         try (Connection conn = Db.get();
                 PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -1104,7 +1092,7 @@ public class StaffDashboard extends BaseDashboard {
         // Hash the new password with BCrypt
         String passwordHash = BCrypt.hashpw(newPassword, BCrypt.gensalt(12));
         
-        String sql = "UPDATE users SET password_hash = ? WHERE id = ? AND role = 'RESIDENT'";
+        String sql = "UPDATE users SET password_hash = ? WHERE user_id = ? AND role = 'RESIDENT'";
         
         try (Connection conn = Db.get();
                 PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -1141,12 +1129,11 @@ public class StaffDashboard extends BaseDashboard {
     private List<Resident> loadResidents() {
         List<Resident> list = new ArrayList<>();
 
-        String sql = "SELECT u.id AS user_id, u.full_name, r.purok, "
-                + "r.status, r.registered_on, r.decided_on "
+        String sql = "SELECT u.user_id, " + Db.fullName("u") + " AS full_name, u.purok, "
+                + "u.account_status, DATE(u.created_at) AS registered_on, u.verified_on "
                 + "FROM users u "
-                + "INNER JOIN residents r ON u.id = r.user_id "
                 + "WHERE u.role = 'RESIDENT' "
-                + "ORDER BY r.registered_on DESC";
+                + "ORDER BY u.created_at DESC";
 
         try (Connection conn = Db.get();
                 PreparedStatement stmt = conn.prepareStatement(sql);
@@ -1156,13 +1143,13 @@ public class StaffDashboard extends BaseDashboard {
                 int userId = rs.getInt("user_id");
                 String name = rs.getString("full_name");
                 String purok = rs.getString("purok");
-                String status = rs.getString("status");
+                String status = rs.getString("account_status");
 
                 java.sql.Date registeredDate
                         = rs.getDate("registered_on");
 
                 java.sql.Date decidedDate
-                        = rs.getDate("decided_on");
+                        = rs.getDate("verified_on");
 
                 LocalDate registered = registeredDate == null
                         ? null : registeredDate.toLocalDate();
@@ -1235,7 +1222,7 @@ public class StaffDashboard extends BaseDashboard {
 
         String updateSql
                 = "UPDATE reports SET status = ?, updated_on = CURDATE(), "
-                + "closed_on = ? WHERE id = ?";
+                + "closed_on = ? WHERE report_id = ?";
 
         String noteSql
                 = "INSERT INTO report_notes "
@@ -1313,15 +1300,20 @@ public class StaffDashboard extends BaseDashboard {
                     "This resident has not finished setting up their profile yet.");
         }
 
-        String sql = "UPDATE residents "
-                + "SET status = ?, decided_on = CURDATE() "
-                + "WHERE user_id = ? AND status = 'PENDING'";
+        String sql = "UPDATE users "
+                + "SET account_status = ?, verified_by = ?, verified_on = CURDATE() "
+                + "WHERE user_id = ? AND role = 'RESIDENT' AND account_status = 'PENDING'";
 
         try (Connection conn = Db.get();
                 PreparedStatement stmt = conn.prepareStatement(sql)) {
 
             stmt.setString(1, newStatus);
-            stmt.setInt(2, res.userId);
+            if (staffId > 0) {
+                stmt.setInt(2, staffId);
+            } else {
+                stmt.setNull(2, java.sql.Types.INTEGER);
+            }
+            stmt.setInt(3, res.userId);
 
             int updated = stmt.executeUpdate();
 
@@ -1356,64 +1348,31 @@ public class StaffDashboard extends BaseDashboard {
         String validFullText = need(fullText, "full announcement");
 
         String sql = "INSERT INTO announcements "
-                + "(staff_id, tag, title, summary, full_text, pinned, posted_at) "
-                + "VALUES (?, ?, ?, ?, ?, ?, NOW())";
-
-        String factSql = "INSERT INTO announcement_facts "
-                + "(announcement_id, label, value, sort_order) "
-                + "VALUES (?, ?, ?, ?)";
+                + "(staff_id, tag, title, summary, full_text, schedule, venue, pinned, posted_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())";
         int announcementId = 0;
 
-        try (Connection conn = Db.get()) {
-
-            conn.setAutoCommit(false);
-
-            try {
-
-                try (PreparedStatement stmt = conn.prepareStatement(
+        try (Connection conn = Db.get();
+                PreparedStatement stmt = conn.prepareStatement(
                         sql, java.sql.Statement.RETURN_GENERATED_KEYS)) {
 
-                    stmt.setInt(1, staffId);
-                    stmt.setString(2, tag);
-                    stmt.setString(3, validTitle);
-                    stmt.setString(4, validSummary);
-                    stmt.setString(5, validFullText);
-                    stmt.setBoolean(6, pinned);
+            stmt.setInt(1, staffId);
+            stmt.setString(2, tag);
+            stmt.setString(3, validTitle);
+            stmt.setString(4, validSummary);
+            stmt.setString(5, validFullText);
+            stmt.setString(6, factValue(facts, "When"));
+            stmt.setString(7, factValue(facts, "Where"));
+            stmt.setBoolean(8, pinned);
 
-                    stmt.executeUpdate();
+            stmt.executeUpdate();
 
-                    try (ResultSet keys = stmt.getGeneratedKeys()) {
-                        if (!keys.next()) {
-                            throw new java.sql.SQLException(
-                                    "Unable to retrieve announcement ID.");
-                        }
-
-                        announcementId = keys.getInt(1);
-                    }
+            try (ResultSet keys = stmt.getGeneratedKeys()) {
+                if (!keys.next()) {
+                    throw new java.sql.SQLException(
+                            "Unable to retrieve announcement ID.");
                 }
-
-                if (facts != null && facts.length > 0) {
-                    try (PreparedStatement stmt
-                            = conn.prepareStatement(factSql)) {
-
-                        for (int i = 0; i < facts.length; i++) {
-                            stmt.setInt(1, announcementId);
-                            stmt.setString(2, facts[i][0]);
-                            stmt.setString(3, facts[i][1]);
-                            stmt.setInt(4, i);
-
-                            stmt.addBatch();
-                        }
-
-                        stmt.executeBatch();
-                    }
-                }
-
-                conn.commit();
-
-            } catch (Exception ex) {
-                conn.rollback();
-                throw ex;
+                announcementId = keys.getInt(1);
             }
 
         } catch (Exception e) {
@@ -1446,71 +1405,23 @@ public class StaffDashboard extends BaseDashboard {
 
         String updateSql = "UPDATE announcements "
                 + "SET tag = ?, title = ?, summary = ?, "
-                + "full_text = ?, pinned = ? "
-                + "WHERE id = ?";
-
-        String deleteFactsSql = "DELETE FROM announcement_facts "
+                + "full_text = ?, schedule = ?, venue = ?, pinned = ? "
                 + "WHERE announcement_id = ?";
 
-        String insertFactsSql = "INSERT INTO announcement_facts "
-                + "(announcement_id, label, value, sort_order) "
-                + "VALUES (?, ?, ?, ?)";
+        try (Connection conn = Db.get();
+                PreparedStatement stmt = conn.prepareStatement(updateSql)) {
 
-        try (Connection conn = Db.get()) {
+            stmt.setString(1, tag);
+            stmt.setString(2, validTitle);
+            stmt.setString(3, validSummary);
+            stmt.setString(4, validFullText);
+            stmt.setString(5, factValue(facts, "When"));
+            stmt.setString(6, factValue(facts, "Where"));
+            stmt.setBoolean(7, pinned);
+            stmt.setInt(8, a.id);
 
-            conn.setAutoCommit(false);
-
-            try {
-                // Update the main announcement
-                try (PreparedStatement stmt
-                        = conn.prepareStatement(updateSql)) {
-
-                    stmt.setString(1, tag);
-                    stmt.setString(2, validTitle);
-                    stmt.setString(3, validSummary);
-                    stmt.setString(4, validFullText);
-                    stmt.setBoolean(5, pinned);
-                    stmt.setInt(6, a.id);
-
-                    if (stmt.executeUpdate() != 1) {
-                        throw new java.sql.SQLException(
-                                "Announcement not found.");
-                    }
-                }
-
-                // Remove the previous additional details
-                try (PreparedStatement stmt
-                        = conn.prepareStatement(deleteFactsSql)) {
-
-                    stmt.setInt(1, a.id);
-                    stmt.executeUpdate();
-                }
-
-                // Save the updated additional details
-                if (facts != null && facts.length > 0) {
-
-                    try (PreparedStatement stmt
-                            = conn.prepareStatement(insertFactsSql)) {
-
-                        for (int i = 0; i < facts.length; i++) {
-
-                            stmt.setInt(1, a.id);
-                            stmt.setString(2, facts[i][0]);
-                            stmt.setString(3, facts[i][1]);
-                            stmt.setInt(4, i);
-
-                            stmt.addBatch();
-                        }
-
-                        stmt.executeBatch();
-                    }
-                }
-
-                conn.commit();
-
-            } catch (Exception ex) {
-                conn.rollback();
-                throw ex;
+            if (stmt.executeUpdate() != 1) {
+                throw new java.sql.SQLException("Announcement not found.");
             }
 
         } catch (Exception e) {
@@ -1528,44 +1439,16 @@ public class StaffDashboard extends BaseDashboard {
 
     private void deleteAnnouncement(Announcement a) {
 
-        String deleteFactsSql
-                = "DELETE FROM announcement_facts WHERE announcement_id = ?";
-
         String deleteAnnouncementSql
-                = "DELETE FROM announcements WHERE id = ?";
+                = "DELETE FROM announcements WHERE announcement_id = ?";
 
-        try (Connection conn = Db.get()) {
+        try (Connection conn = Db.get();
+                PreparedStatement stmt = conn.prepareStatement(deleteAnnouncementSql)) {
 
-            conn.setAutoCommit(false);
+            stmt.setInt(1, a.id);
 
-            try {
-                // Delete additional announcement details first
-                try (PreparedStatement stmt
-                        = conn.prepareStatement(deleteFactsSql)) {
-
-                    stmt.setInt(1, a.id);
-                    stmt.executeUpdate();
-                }
-
-                // Delete the announcement
-                try (PreparedStatement stmt
-                        = conn.prepareStatement(deleteAnnouncementSql)) {
-
-                    stmt.setInt(1, a.id);
-
-                    int deleted = stmt.executeUpdate();
-
-                    if (deleted != 1) {
-                        throw new java.sql.SQLException(
-                                "Announcement not found.");
-                    }
-                }
-
-                conn.commit();
-
-            } catch (Exception ex) {
-                conn.rollback();
-                throw ex;
+            if (stmt.executeUpdate() != 1) {
+                throw new java.sql.SQLException("Announcement not found.");
             }
 
         } catch (Exception e) {
@@ -1576,6 +1459,21 @@ public class StaffDashboard extends BaseDashboard {
 
         posts.remove(a);
         refreshAll();
+    }
+
+    /**
+     * Finds a detail row such as "When" or "Where"; null when it is empty.
+     * These are saved in the schedule and venue columns.
+     */
+    private static String factValue(String[][] facts, String label) {
+        if (facts != null) {
+            for (String[] f : facts) {
+                if (label.equals(f[0]) && f[1] != null && !f[1].trim().isEmpty()) {
+                    return f[1].trim();
+                }
+            }
+        }
+        return null;
     }
 
     private void fillPost(Announcement a, String tag, String title, String summary, String fullText,
