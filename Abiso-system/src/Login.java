@@ -470,9 +470,9 @@ public class Login extends JFrame {
 
         JPanel forgotRow = new JPanel(new BorderLayout());
         forgotRow.setOpaque(false);
-        forgotRow.add(link("Forgot password?", () -> JOptionPane.showMessageDialog(this,
-                "Please visit the barangay office with a valid ID\nand staff will help you reset your password.",
-                "Forgot password", JOptionPane.INFORMATION_MESSAGE)), BorderLayout.EAST);
+        forgotRow.add(link("Forgot password?", ()
+                -> new ForgotPasswordDialog(this, loginEmail.getText().trim()).setVisible(true)),
+                BorderLayout.EAST);
 
         loginView = column(18,
                 column(4, BaseDashboard.heading("Welcome back", 28, INK),

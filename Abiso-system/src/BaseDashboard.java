@@ -1691,7 +1691,7 @@ public abstract class BaseDashboard extends JFrame {
     }
 
     // ---- 4-step progress tracker ----
-    static final String[] STEPS = {"Received", "Under review", "In progress", "Resolved"};
+    static final String[] STEPS = {"Received", "Under Review", "In progress", "Resolved"};
 
     static class ProgressSteps extends JComponent {
 
@@ -1758,7 +1758,7 @@ public abstract class BaseDashboard extends JFrame {
         switch (status) {
             case "Submitted":
                 return 0;
-            case "Viewed":
+            case "Under Review":
                 return 1;
             case "In progress":
                 return 2;
@@ -2678,7 +2678,7 @@ public abstract class BaseDashboard extends JFrame {
     static final String ADDRESS_RULE = "Home address may only contain letters, numbers, spaces, commas, periods and hyphens.";
 
     // ================================================================ SHARED DATA MODELS AND CONSTANTS
-    static final String[] STATUSES = {"Submitted", "Viewed", "In progress", "Resolved", "Declined"};
+    static final String[] STATUSES = {"Submitted", "Under Review", "In progress", "Resolved", "Declined"};
     static final String[] CATEGORIES = {"Sanitation", "Roads & Lights", "Noise", "Peace & Order", "Others"};
     static final String[] TAGS = {"Event", "Health", "Notice", "Reminder"};
 
