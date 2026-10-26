@@ -887,15 +887,26 @@ public class ResidentDashboard extends BaseDashboard {
                 labeled("Home address *", scrollOf(pAddress)),
                 buttons(discard, save));
 
+        Dyn accountFacts = dyn(this::accountFacts);
+        accountFacts.setOpaque(false);
         JComponent account = column(14,
-                factBox(new String[][]{
-            {"Name", userName},
-            {"Role", "Resident"}}),
+                accountFacts,
                 wrap("Your name and verification are managed by barangay staff. "
                         + "To correct them, please visit the barangay hall with a valid ID.", 230, 13, BODY));
 
         return page(dyn(this::setupBody), profileHeaderView,
                 twoCol(section("Personal details", null, form), section("Account", null, account), 3, 2));
+    }
+
+    /**
+     * Name, email and role shown in the Account card.
+     */
+    private JComponent accountFacts() {
+        String email = loadResidentColumn("email").trim();
+        return factBox(new String[][]{
+            {"Name", userName},
+            {"Email", email.isEmpty() ? "Not provided" : email},
+            {"Role", "Resident"}});
     }
 
     private JComponent profileHeader() {

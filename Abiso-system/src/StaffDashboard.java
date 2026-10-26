@@ -663,15 +663,26 @@ public class StaffDashboard extends BaseDashboard {
                 labeled("Contact number", sContact),
                 buttons(discard, save));
 
+        Dyn accountFacts = dyn(this::accountFacts);
+        accountFacts.setOpaque(false);
         JComponent account = column(14,
-                factBox(new String[][]{
-                    {"Name", userName},
-                    {"Role", "Barangay Staff"}}),
+                accountFacts,
                 wrap("Your name and login are managed by the system administrator. "
                         + "Contact them if these need to be corrected.", 230, 13, BODY));
 
         return page(profileHeaderView,
-                twoCol(section("Personal details", null, form), section("Account", null, account), 3, 2));
+                twoCol(section("Staff details", null, form), section("Account", null, account), 3, 2));
+    }
+
+    /**
+     * Name, email and role shown in the Account card.
+     */
+    private JComponent accountFacts() {
+        String email = loadStaffColumn("email").trim();
+        return factBox(new String[][]{
+            {"Name", userName},
+            {"Email", email.isEmpty() ? "Not provided" : email},
+            {"Role", "Barangay Staff"}});
     }
 
     private JComponent profileHeader() {
@@ -854,6 +865,7 @@ public class StaffDashboard extends BaseDashboard {
     private JComponent residentInfoView(JDialog d, Resident r) {
         String contact = loadResidentColumn(r.userId, "contact_number");
         String address = loadResidentColumn(r.userId, "address");
+        String email = loadResidentColumn(r.userId, "email");
         String birth = birthText(loadResidentColumn(r.userId, "birth_date"));
         int total = 0, open = 0;
         for (Report x : reports) {
@@ -888,6 +900,7 @@ public class StaffDashboard extends BaseDashboard {
             {"Purok", r.purok == null || r.purok.isEmpty() ? "Not provided" : r.purok},
             {"Registered on", Fmt.date(r.registered)},
             {decision, decisionValue},
+            {"Email", email.isEmpty() ? "Not provided" : email},
             {"Contact number", contact.isEmpty() ? "Not provided" : contact},
             {"Home address", address.isEmpty() ? "Not provided" : address},
             {"Profile setup", isReady(r) ? "Complete" : "Not finished yet"},
