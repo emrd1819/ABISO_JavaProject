@@ -29,7 +29,7 @@ public class ResidentDashboard extends BaseDashboard {
     // ---- UI-only state (no database involved) ----
     private String currentPage = "Home";
     private int lastSeenAnnouncement = 0;                    // highest announcement id the resident has already seen
-    private JTextField pPurok, pContact;                     // My Profile form fields
+    private JTextField pPurok, pContact, pBirth;                     // My Profile form fields
     private JTextArea pAddress;
     private boolean profileLoaded = false;
     private boolean setupDone = true;                       // contact number + address filled in
@@ -854,8 +854,10 @@ public class ResidentDashboard extends BaseDashboard {
         profileHeaderView = dyn(this::profileHeader);
         pPurok = inputField();
         pContact = inputField();
+        pBirth = inputField();
         pAddress = inputArea(3);
         restrictInput(pContact, BaseDashboard::isDigit, 11);
+        restrictInput(pBirth, cp -> isDigit(cp) || cp == '-', 10);
         restrictInput(pAddress, BaseDashboard::isAddressChar, 200);
 
         JButton discard = secondaryButton("Discard changes");
@@ -865,7 +867,7 @@ public class ResidentDashboard extends BaseDashboard {
             loadProfileOnce();
         });
         save.addActionListener(e -> {
-            boolean ok = attempt(this, () -> saveProfile(pPurok.getText(), pContact.getText(), pAddress.getText()));
+            boolean ok = attempt(this, () -> saveProfile(pPurok.getText(), pContact.getText(), pAddress.getText(), pBirth.getText()));
             if (ok) {
                 boolean first = !setupDone;
                 setupDone = true;
@@ -881,6 +883,7 @@ public class ResidentDashboard extends BaseDashboard {
         JComponent form = column(14,
                 labeled("Purok / zone *", pPurok),
                 labeled("Contact number *", pContact),
+                labeled("Birth date * (YYYY-MM-DD)", pBirth),
                 labeled("Home address *", scrollOf(pAddress)),
                 buttons(discard, save));
 
@@ -945,7 +948,8 @@ public class ResidentDashboard extends BaseDashboard {
                 return new String[]{
                     loadResidentColumn("purok"),
                     loadResidentColumn("contact_number"),
-                    loadResidentColumn("address")};
+                    loadResidentColumn("address"),
+                    loadResidentColumn("birth_date")};
             }
 
             @Override
@@ -955,6 +959,7 @@ public class ResidentDashboard extends BaseDashboard {
                     pPurok.setText(v[0]);
                     pContact.setText(v[1]);
                     pAddress.setText(v[2]);
+                    pBirth.setText(v[3]);
                 } catch (Exception ex) {
                     System.err.println("Profile load failed: " + ex.getMessage());
                 }
@@ -984,7 +989,7 @@ public class ResidentDashboard extends BaseDashboard {
         return "";
     }
 
-    private void saveProfile(String purok, String contact, String address) {
+    private void saveProfile(String purok, String contact, String address, String birth) {
 
         if (userId <= 0) {
             throw new IllegalStateException(
@@ -1001,7 +1006,19 @@ public class ResidentDashboard extends BaseDashboard {
             throw new IllegalArgumentException(ADDRESS_RULE);
         }
 
-        String sql = "UPDATE users SET purok = ?, contact_number = ?, address = ? "
+        java.time.LocalDate validBirth;
+        try {
+            validBirth = java.time.LocalDate.parse(need(birth, "birth date"));
+        } catch (java.time.format.DateTimeParseException ex) {
+            throw new IllegalArgumentException(
+                    "Birth date must be a real date written as YYYY-MM-DD, for example 1995-03-27.");
+        }
+        if (validBirth.isAfter(java.time.LocalDate.now())
+                || validBirth.isBefore(java.time.LocalDate.of(1900, 1, 1))) {
+            throw new IllegalArgumentException("Please enter a valid birth date.");
+        }
+
+        String sql = "UPDATE users SET purok = ?, contact_number = ?, address = ?, birth_date = ? "
                 + "WHERE user_id = ? AND role = 'RESIDENT'";
 
         try (java.sql.Connection conn = Db.get();
@@ -1011,7 +1028,8 @@ public class ResidentDashboard extends BaseDashboard {
             stmt.setString(1, validPurok);
             stmt.setString(2, validContact);
             stmt.setString(3, validAddress);
-            stmt.setInt(4, userId);
+            stmt.setDate(4, java.sql.Date.valueOf(validBirth));
+            stmt.setInt(5, userId);
 
             stmt.executeUpdate();
 
@@ -1183,10 +1201,11 @@ public class ResidentDashboard extends BaseDashboard {
         refreshAll();
     }
 
+    /**
+     * Always start from the sign-in page (no test account), even when this
+     * file is the one being run.
+     */
     public static void main(String[] args) {
-        String status = "VERIFIED";
-        SwingUtilities.invokeLater(()
-                -> new ResidentDashboard(0, "Juan Dela Cruz", status).setVisible(true)
-        );
+        Login.main(args);
     }
 }

@@ -346,7 +346,7 @@ public class StaffDashboard extends BaseDashboard {
             }
             JButton review = smallButton("Review", ACCENT);
             review.addActionListener(e -> showPage("Residents"));
-            rows.add(personRow(r.name, r.purok, review, () -> openResident(r, this)));
+            rows.add(personRow(r.name, residentNo(r) + "  -  " + r.purok, review, () -> openResident(r, this)));
         }
         if (rows.isEmpty()) {
             return emptyState("No residents are waiting for verification.");
@@ -357,7 +357,7 @@ public class StaffDashboard extends BaseDashboard {
     // ================================================================ RESIDENTS
     private JComponent residents() {
         Dyn list = dyn(this::residentList);
-        JComponent search = searchField("Search by name or purok",
+        JComponent search = searchField("Search by name, resident no. or purok",
                 q -> {
                     residentQuery = q;
                     list.refresh();
@@ -373,7 +373,7 @@ public class StaffDashboard extends BaseDashboard {
     private JComponent residentList() {
         List<Resident> all = new ArrayList<>();
         for (Resident r : sortedResidents()) {
-            if ((residentFilter == null || residentFilter.equals(r.status)) && matches(residentQuery, r.name, r.purok)) {
+            if ((residentFilter == null || residentFilter.equals(r.status)) && matches(residentQuery, r.name, r.purok, residentNo(r))) {
                 all.add(r);
             }
         }
@@ -404,16 +404,16 @@ public class StaffDashboard extends BaseDashboard {
                         toast("Resident approved", r.name + " can now file reports.", GREEN, "check");
                     }
                 });
-                rows[i] = personRow(r.name, r.purok + (ready ? "  -  registered " : "  -  setting up profile  -  registered ")
+                rows[i] = personRow(r.name, residentNo(r) + "  -  " + r.purok + (ready ? "  -  registered " : "  -  setting up profile  -  registered ")
                         + Fmt.date(r.registered),
                         buttons(decline, approve), () -> openResident(r, this));
             } else if ("VERIFIED".equals(r.status)) {
-                rows[i] = personRow(r.name, r.purok + "  -  verified " + Fmt.date(r.decidedOn),
+                rows[i] = personRow(r.name, residentNo(r) + "  -  " + r.purok + "  -  verified " + Fmt.date(r.decidedOn),
                         statusPill("Verified"), () -> openResident(r, this));
             } else {
                 JButton reconsider = smallButton("Reconsider", ACCENT);
                 reconsider.addActionListener(e -> reconsiderFlow(r, this));
-                rows[i] = personRow(r.name, r.purok + "  -  not approved",
+                rows[i] = personRow(r.name, residentNo(r) + "  -  " + r.purok + "  -  not approved",
                         buttons(reconsider, statusPill("Declined")), () -> openResident(r, this));
             }
         }
@@ -822,9 +822,39 @@ public class StaffDashboard extends BaseDashboard {
         d.setVisible(true);
     }
 
+    /**
+     * user_code of each resident (e.g. RB1-0002), filled by loadResidents().
+     */
+    private static final java.util.Map<Integer, String> RESIDENT_CODES = new java.util.HashMap<>();
+
+    /**
+     * Resident number shown to staff: the user_code stored in the database.
+     */
+    private static String residentNo(Resident r) {
+        String code = RESIDENT_CODES.get(r.userId);
+        return code == null || code.isEmpty() ? "Not assigned" : code;
+    }
+
+    /**
+     * Turns the stored yyyy-MM-dd text into "Mar 27, 1995  (age 31)".
+     */
+    private static String birthText(String raw) {
+        if (raw == null || raw.isEmpty()) {
+            return "Not provided";
+        }
+        try {
+            LocalDate b = LocalDate.parse(raw.length() > 10 ? raw.substring(0, 10) : raw);
+            int age = java.time.Period.between(b, LocalDate.now()).getYears();
+            return Fmt.date(b) + "  (age " + age + ")";
+        } catch (java.time.format.DateTimeParseException ex) {
+            return raw;
+        }
+    }
+
     private JComponent residentInfoView(JDialog d, Resident r) {
         String contact = loadResidentColumn(r.userId, "contact_number");
         String address = loadResidentColumn(r.userId, "address");
+        String birth = birthText(loadResidentColumn(r.userId, "birth_date"));
         int total = 0, open = 0;
         for (Report x : reports) {
             if (x.residentId == r.userId) {
@@ -853,6 +883,8 @@ public class StaffDashboard extends BaseDashboard {
                 : "REJECTED".equals(r.status) ? "Declined on" : "Status";
         String decisionValue = pending ? "Waiting for verification" : Fmt.date(r.decidedOn);
         JComponent facts = factBox(new String[][]{
+            {"Resident no.", residentNo(r)},
+            {"Birth date", birth},
             {"Purok", r.purok == null || r.purok.isEmpty() ? "Not provided" : r.purok},
             {"Registered on", Fmt.date(r.registered)},
             {decision, decisionValue},
@@ -1011,7 +1043,7 @@ public class StaffDashboard extends BaseDashboard {
     private List<Resident> loadResidents() {
         List<Resident> list = new ArrayList<>();
 
-        String sql = "SELECT u.user_id, " + Db.fullName("u") + " AS full_name, u.purok, "
+        String sql = "SELECT u.user_id, u.user_code, " + Db.fullName("u") + " AS full_name, u.purok, "
                 + "u.account_status, DATE(u.created_at) AS registered_on, u.verified_on "
                 + "FROM users u "
                 + "WHERE u.role = 'RESIDENT' "
@@ -1023,6 +1055,7 @@ public class StaffDashboard extends BaseDashboard {
 
             while (rs.next()) {
                 int userId = rs.getInt("user_id");
+                RESIDENT_CODES.put(userId, rs.getString("user_code"));
                 String name = rs.getString("full_name");
                 String purok = rs.getString("purok");
                 String status = rs.getString("account_status");
@@ -1368,7 +1401,11 @@ public class StaffDashboard extends BaseDashboard {
         a.pinned = pinned;
     }
 
+    /**
+     * Always start from the sign-in page (no test account), even when this
+     * file is the one being run.
+     */
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new StaffDashboard(0, "Brgy. Staff").setVisible(true));
+        Login.main(args);
     }
 }
