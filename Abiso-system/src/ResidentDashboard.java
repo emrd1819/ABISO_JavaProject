@@ -1,3 +1,4 @@
+
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -9,6 +10,9 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.MatteBorder;
 
+/*
+These fields are the dashboard’s memory. They store who the resident is, their reports and announcements, and which page they’re on. 
+The dyn() helper registers every section that can redraw itself, so when the database changes, we can update the screen without reloading the whole window*/
 public class ResidentDashboard extends BaseDashboard {
 
     private final int userId;
@@ -379,7 +383,7 @@ public class ResidentDashboard extends BaseDashboard {
                             oldReportStatus.put(r.id, r.status);
                         }
                         int oldMaxPost = maxPostId();
-                         String oldAnnouncementSnapshot = announcementSnapshot(posts);
+                        String oldAnnouncementSnapshot = announcementSnapshot(posts);
                         String oldStatus = status;
 
                         reports.clear();
@@ -410,12 +414,12 @@ public class ResidentDashboard extends BaseDashboard {
 
                         refreshAll();
 
-                         // Only rebuild the bulletin board when its contents change.
-                         // This keeps expanded posts open during ordinary 5-second checks.
-                         if (!oldAnnouncementSnapshot.equals(announcementSnapshot(posts))
-                                 && announcementFeedView != null) {
-                             announcementFeedView.refresh();
-                         }
+                        // Only rebuild the bulletin board when its contents change.
+                        // This keeps expanded posts open during ordinary 5-second checks.
+                        if (!oldAnnouncementSnapshot.equals(announcementSnapshot(posts))
+                                && announcementFeedView != null) {
+                            announcementFeedView.refresh();
+                        }
 
                         if (oldStatus != null && !oldStatus.equals(status)) {
                             statusChanged(status);
@@ -1213,8 +1217,8 @@ public class ResidentDashboard extends BaseDashboard {
     }
 
     /**
-     * Always start from the sign-in page (no test account), even when this
-     * file is the one being run.
+     * Always start from the sign-in page (no test account), even when this file
+     * is the one being run.
      */
     public static void main(String[] args) {
         Login.main(args);
